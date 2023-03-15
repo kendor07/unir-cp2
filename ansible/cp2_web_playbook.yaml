@@ -129,19 +129,19 @@
     ### launches the container in the remote host
     ### systemd enabled 
     ##############################
-    - name: A postgres container must exist, stopped
+    - name: A httpd container must exist, stopped
       containers.podman.podman_container:
         name: "{{ container_name }}_local"
         image: "{{ acr_address }}{{ image_name }}:{{ image_tag }}"
         ports: "{{ iport }}:{{ oport }}"
         state: stopped
 
-    - name: Systemd unit files for postgres container must exist
+    - name: Systemd unit files for httpd container must exist
       containers.podman.podman_generate_systemd:
         name: "{{ container_name }}_local"
         dest: /etc/systemd/system
 
-    - name: Postgres container must be started and enabled on systemd
+    - name: httpd container must be started and enabled on systemd
       ansible.builtin.systemd:
         name: "container-{{ container_name }}_local"
         daemon_reload: yes
