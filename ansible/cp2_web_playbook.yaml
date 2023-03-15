@@ -1,0 +1,149 @@
+##############################
+### Ansible script for Caso Practico 2
+##############################
+---
+- name: "caso practico 2 - webserver"
+  hosts: "webservers"
+  remote_user: "azureuser"
+  become: true
+  vars_files:
+    - "vars/cp2_web_vars.yaml"
+  tasks:
+    
+    ##############################
+    ### Python passli instalation is needed to use
+    ### httpasswd, it is a dependency
+    ##############################
+    - name: Install passlib python package
+      ansible.builtin.pip:
+        name: passlib
+      delegate_to: localhost
+    
+    ##############################
+    ### Creates an independent working directory
+    ##############################
+    - name: 'Creates working directory in local'
+      file:
+        path: ./{{ work_dir }}
+        state: directory
+      delegate_to: localhost
+      
+    ##############################
+    ### Creating the credentials file for apache
+    ##############################
+    - name: 'httpasswd'
+      htpasswd:
+        path: ./{{ work_dir }}/{{ cred_file }}
+        name: "{{ user_name }}"
+        password: "{{ user_pass }}"
+        mode: 0755
+      delegate_to: localhost
+    
+    ##############################
+    ### Generates a selfsigned x509_certificate witn no passhrase
+    ##############################
+    - name: Generate private key
+      openssl_privatekey:
+        path: ./{{ work_dir }}/{{ key_file }}.key
+        #cipher: auto
+        #passphrase: "{{ privatekey_passphrase }}"
+      delegate_to: localhost
+    - name: Generate CSR
+      openssl_csr:
+        path: ./{{ work_dir }}/{{ key_file }}.csr
+        privatekey_path: ./{{ work_dir }}/{{ key_file }}.key
+        #privatekey_passphrase: "{{ privatekey_passphrase }}"
+        common_name: "{{ key_file }}"
+      delegate_to: localhost
+    - name: Generate a Self Signed OpenSSL certificate
+      community.crypto.x509_certificate:
+        path: ./{{ work_dir }}/{{ key_file }}.crt
+        privatekey_path: ./{{ work_dir }}/{{ key_file }}.key
+        csr_path: ./{{ work_dir }}/{{ key_file }}.csr
+        #privatekey_passphrase: "{{ privatekey_passphrase }}"
+        provider: selfsigned
+      delegate_to: localhost
+    
+    ##############################
+    ### Using yum to install some packages
+    ##############################
+    - name: 'Install rpms'
+      yum:
+        name: "{{ rpms }}"
+        state: latest
+
+    ##############################
+    ### moving files to the same directory to build the image 
+    ##############################
+    - name: Copy index.html from local to remote
+      copy:
+        src: "./{{ config_dir }}/index.html"
+        dest: "./{{ work_dir }}/index.html"
+      delegate_to: localhost
+    - name: Copy httpd.conf from local to remote
+      copy:
+        src: "./{{ config_dir }}/httpd.conf"
+        dest: "./{{ work_dir }}/httpd.conf"
+      delegate_to: localhost
+    - name: Copy Containerfile from local to remote
+      copy:
+        src: "./{{ config_dir }}/Containerfile"
+        dest: "./{{ work_dir }}/Containerfile"
+      delegate_to: localhost
+    - name: Copy .htaccess from local to remote
+      copy:
+        src: "./{{ config_dir }}/.htaccess"
+        dest: "./{{ work_dir }}/.htaccess"
+      delegate_to: localhost
+    
+    ##############################
+    ### Builds the image in the local host
+    ### and moves it to ACR 
+    ##############################
+    - name: Downloads httpd
+      containers.podman.podman_image:
+        name: docker.io/httpd
+      delegate_to: localhost
+    - name: Builds customized image
+      containers.podman.podman_image:
+        name: "{{ image_name }}"
+        path: ./{{ work_dir }}
+        tag: "{{ image_tag }}"
+        push: yes
+        username: "{{ acr_username }}"
+        password: "{{ acr_password }}"
+        push_args:
+          dest: "{{ acr_address }}"
+      delegate_to: localhost
+    
+    ##############################
+    ### pull the image form acr and launch it (host)
+    ##############################
+    - name: 'Pull arc image'
+      containers.podman.podman_image:
+        name: "{{ acr_address }}{{ image_name }}:{{ image_tag }}"
+        password: "{{ acr_password }}"
+        username: "{{ acr_username }}"
+        
+    ##############################
+    ### launches the container in the remote host
+    ### systemd enabled 
+    ##############################
+    - name: A postgres container must exist, stopped
+      containers.podman.podman_container:
+        name: "{{ container_name }}_local"
+        image: "{{ acr_address }}{{ image_name }}:{{ image_tag }}"
+        ports: "{{ iport }}:{{ oport }}"
+        state: stopped
+
+    - name: Systemd unit files for postgres container must exist
+      containers.podman.podman_generate_systemd:
+        name: "{{ container_name }}_local"
+        dest: /etc/systemd/system
+
+    - name: Postgres container must be started and enabled on systemd
+      ansible.builtin.systemd:
+        name: "container-{{ container_name }}_local"
+        daemon_reload: yes
+        state: started
+        enabled: yes

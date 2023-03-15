@@ -1,0 +1,35 @@
+# yum list of packages to install
+rpms: 
+  - podman
+  - skopeo
+  - httpd-tools
+  - openssl
+
+# work directory in the remote host
+work_dir: 'webserver_v2'
+config_dir: 'webserver_v2_config'
+
+# credentials for http
+cred_file: '.creds'
+user_name: 'usertest'
+user_pass: test #not vaulted, the project is not mounted
+
+# variables for https certificate
+key_file: 'localhost'
+#privatekey_passphrase: 'secret'
+
+# variables for image to be built
+image_name: 'webserver'
+image_tag: 'casopractico2'
+
+#variables for acr container registry
+acr_username: 'containerRegistryCP2Test001'
+acr_address: 'containerregistrycp2test001.azurecr.io/'
+acr_password: !vault |
+              $ANSIBLE_VAULT;1.1;AES256
+              [YOUR_VAULTED_VALUE]
+
+# variables for container created from image
+container_name: 'web'
+iport: "8080"
+oport: "443"

@@ -1,0 +1,94 @@
+##############################
+### Ansible script for Caso Practico 2 (kubernetes)
+### requirements:
+### active azure account
+### credentials and access granted for:
+### cli: az login (azure)
+### cli: az aks get-credentials (kubernetes)
+##############################
+---
+- name: "caso practico 2 - kubernetes"
+  hosts: localhost
+  connection: local
+  vars_files:
+    - "vars/cp2_kube_vars.yaml"
+  tasks:
+
+    ##############################
+    ### sends image from dockerhub to acr container
+    ##############################   
+    - name: 'downloads mongo image from docker hub to the private acr repositiory' 
+      azure.azcollection.azure_rm_containerregistrytag:
+        registry: "{{ acr_username }}"
+        repository_name: "{{ acr_repo_name }}"
+        source_image:
+          registry_uri: "{{ public_repo }}"
+          repository: "{{ public_image }}"
+          name: "{{ public_version }}"
+
+    ##############################
+    ### get aks credentials automatically
+    ### not required for caso practico 2
+    ### uncomment if needed
+    ##############################
+    - name: Delete existing .kube folder
+      file:
+        path: "/root/.kube/"
+        state: absent
+
+    - name: 'Acr to be accessible from aks'
+      command: >
+        az aks get-credentials
+        --resource-group rg-casopractico-test001
+        --name cp2-aks1-001
+      ignore_errors: true
+    
+    ##############################
+    ### Creates an independent working directory
+    ##############################
+    - name: 'Creates working directory in local'
+      file:
+        path: ./{{ work_dir }}
+        state: directory
+        
+    ##############################
+    ### moving required files to the working directory 
+    ##############################
+    - name: Copy * from local to remote
+      copy:
+        src: "./{{ config_dir }}/"
+        dest: "./{{ work_dir }}/"
+
+    ##############################
+    ### Applying configuration from yaml files 
+    ##############################
+    - name: Apply K8s resources
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', '{{ item }}') | from_yaml }}"
+      with_fileglob:
+        - "./{{ work_dir }}/namespace.yaml"
+        - "./{{ work_dir }}/crd.yaml"
+        - "./{{ work_dir }}/rbac/role.yaml"
+        - "./{{ work_dir }}/rbac/role_binding.yaml"
+        - "./{{ work_dir }}/rbac/role_binding_database.yaml"
+        - "./{{ work_dir }}/rbac/role_database.yaml"
+        - "./{{ work_dir }}/rbac/service_account.yaml"
+        - "./{{ work_dir }}/rbac/service_account_database.yaml"
+        - "./{{ work_dir }}/operator.yaml"
+        - "./{{ work_dir }}/internal/mongodb.yaml"
+        - "./{{ work_dir }}/internal/services.yaml"
+        - "./{{ work_dir }}/internal/secret.yaml"
+            
+    ##############################
+    ### cleaning up
+    ### Only one cpu available in the kubernetes
+    ### turning connector pod off to give room for mongo in the pod
+    ##############################
+    - name: Remove an existing deployment object
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Deployment
+        namespace: "{{ aks_namespace }}"
+        name: mongodb-kubernetes-operator
+

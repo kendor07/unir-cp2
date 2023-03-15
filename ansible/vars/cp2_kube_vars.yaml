@@ -1,0 +1,23 @@
+# work directory in the remote host
+work_dir: 'kubernetes_v2'
+config_dir: 'kubernetes_v2_config'
+
+# variables for image to be built
+image_name: 'mongo'
+image_tag: '5.0.5' # 'casopractico2'
+
+#public repository
+public_repo: 'docker.io'
+public_image: 'library/mongo'
+public_version: '5.0.5'
+
+#aks
+aks_namespace: mongodb-cp2
+aks_name: cp2-aks1-001
+resource_gr: rg-casopractico-test001
+
+#acr
+acr_username: 'containerRegistryCP2Test001'
+acr_address: 'containerregistrycp2test001.azurecr.io/'
+acr_repo_name: 'mongo'
+
